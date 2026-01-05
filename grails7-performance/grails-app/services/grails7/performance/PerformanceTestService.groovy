@@ -2,7 +2,8 @@ package grails7.performance
 
 import grails.gorm.transactions.Transactional
 import groovy.time.TimeCategory
-import groovy.transform.CompileStatic
+
+import java.util.stream.Collectors
 
 @Transactional(readOnly = true)
 class PerformanceTestService {
@@ -159,11 +160,11 @@ class PerformanceTestService {
         def allProjects = Project.list(fetch: [tasks: 'eager', milestones: 'eager', department: 'eager'])
 
         // Project completion analysis
-        def completionAnalysis = allProjects.collect { project ->
+        def completionAnalysis = allProjects.stream().map((project) -> {
             def tasks = project.tasks ?: []
             def milestones = project.milestones ?: []
-            def completedTasks = tasks.count { it.status == 'DONE' }
-            def completedMilestones = milestones.count { it.isCompleted }
+            def completedTasks = tasks.stream().filter({ it.status == 'DONE' }).count()
+            def completedMilestones = milestones.stream().filter({ it.isCompleted }).count()
 
             [
                 projectName: project.name,
@@ -175,11 +176,13 @@ class PerformanceTestService {
                 totalMilestones: milestones.size(),
                 completedMilestones: completedMilestones,
                 milestoneCompletionRate: milestones.size() > 0 ? (completedMilestones / milestones.size() * 100).round(2) : 0,
-                estimatedHours: tasks.sum { it.estimatedHours ?: 0 } ?: 0,
-                actualHours: tasks.sum { it.actualHours ?: 0 } ?: 0,
+                estimatedHours: tasks.stream().collect(Collectors.summingInt (it) -> { return it.estimatedHours ?: 0
+                }) ?: 0,
+                actualHours   : tasks.stream().collect(Collectors.summingInt (it) -> { return it.actualHours ?: 0
+                }) ?: 0,
                 budget: project.budget
             ]
-        }
+        }).collect(Collectors.toList())
 
         // Projects by status summary
         def statusSummary = allProjects.groupBy { it.status }.collectEntries { status, projects ->
